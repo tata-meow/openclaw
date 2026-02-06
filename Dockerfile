@@ -1,10 +1,23 @@
-FROM node:22-bookworm@sha256:cd7bcd2e7a1e6f72052feb023c7f6b722205d3fcab7bbcbd2d1bfdab10b1e935
+FROM node:22-trixie
 
 # Install Bun (required for build scripts)
 RUN curl -fsSL https://bun.sh/install | bash
 ENV PATH="/root/.bun/bin:${PATH}"
 
 RUN corepack enable
+
+# Install jq for JSON processing
+RUN apt-get update && \
+    DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends jq && \
+    apt-get clean && \
+    rm -rf /var/lib/apt/lists/* /var/cache/apt/archives/*
+
+# Security hardening: Reconfigure node user before copying files
+# The node:22-trixie image includes a 'node' user (uid 1000)
+# This reduces the attack surface by preventing container escape via root privileges
+RUN usermod -u 1001 node \
+  && groupmod -g 1001 node \
+  && chown -R node:node /home/node
 
 WORKDIR /app
 RUN chown node:node /app
@@ -49,11 +62,26 @@ RUN pnpm build
 ENV OPENCLAW_PREFER_PNPM=1
 RUN pnpm ui:build
 
+ARG OPENCLAW_VERSION=dev
 ENV NODE_ENV=production
+ENV OPENCLAW_BUNDLED_VERSION=${OPENCLAW_VERSION}
 
 # Security hardening: Run as non-root user
 # The node:22-bookworm image includes a 'node' user (uid 1000)
 # This reduces the attack surface by preventing container escape via root privileges
+
+RUN echo '#!/bin/sh\nnode /app/dist/index.js "$@"' > /usr/local/bin/openclaw \
+  && chmod +x /usr/local/bin/openclaw
+
+# 從官方 uv 鏡像中拷貝執行檔
+COPY --from=ghcr.io/astral-sh/uv:latest /uv /uvx /bin/
+
+# 驗證安裝
+RUN uv --version
+
+RUN curl -L "https://github.com/steipete/CodexBar/releases/download/v0.18.0-beta.2/CodexBarCLI-v0.18.0-beta.2-linux-x86_64.tar.gz" \
+    | tar -xz -C /usr/bin \
+    && chmod +x /usr/bin/codexbar
 USER node
 
 # Start gateway server with default config.
