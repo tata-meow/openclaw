@@ -128,6 +128,13 @@ export type TelegramAccountConfig = {
   reactionLevel?: "off" | "ack" | "minimal" | "extensive";
   /** Heartbeat visibility settings for this channel. */
   heartbeat?: ChannelHeartbeatVisibilityConfig;
+  /** External message injection config (for userbot relay). */
+  inject?: {
+    /** Enable the /telegram/inject endpoint for this account. */
+    enabled?: boolean;
+    /** Shared secret token for authentication (required when enabled). */
+    token?: string;
+  };
   /** Controls whether link previews are shown in outbound messages. Default: true. */
   linkPreview?: boolean;
   /**

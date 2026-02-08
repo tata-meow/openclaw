@@ -343,6 +343,8 @@ const FIELD_LABELS: Record<string, string> = {
   "channels.telegram.network.autoSelectFamily": "Telegram autoSelectFamily",
   "channels.telegram.timeoutSeconds": "Telegram API Timeout (seconds)",
   "channels.telegram.capabilities.inlineButtons": "Telegram Inline Buttons",
+  "channels.telegram.inject.enabled": "Telegram Inject Enabled",
+  "channels.telegram.inject.token": "Telegram Inject Token",
   "channels.whatsapp.dmPolicy": "WhatsApp DM Policy",
   "channels.whatsapp.selfChatMode": "WhatsApp Self-Phone Mode",
   "channels.whatsapp.debounceMs": "WhatsApp Message Debounce (ms)",
@@ -733,6 +735,10 @@ const FIELD_HELP: Record<string, string> = {
     "Override Node autoSelectFamily for Telegram (true=enable, false=disable).",
   "channels.telegram.timeoutSeconds":
     "Max seconds before Telegram API requests are aborted (default: 500 per grammY).",
+  "channels.telegram.inject.enabled":
+    "Enable the /telegram/inject HTTP endpoint for external message injection (userbot relay).",
+  "channels.telegram.inject.token":
+    "Shared secret token for authenticating inject requests (required when inject.enabled is true).",
   "channels.whatsapp.dmPolicy":
     'Direct message access control ("pairing" recommended). "open" requires channels.whatsapp.allowFrom=["*"].',
   "channels.whatsapp.selfChatMode": "Same-phone setup (bot uses your personal WhatsApp number).",
