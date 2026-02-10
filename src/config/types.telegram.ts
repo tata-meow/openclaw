@@ -138,6 +138,16 @@ export type TelegramAccountConfig = {
    * Use `"auto"` to derive `[{identity.name}]` from the routed agent.
    */
   responsePrefix?: string;
+  /**
+   * Telegram Update injection endpoint configuration.
+   * Allows external MTProto clients (Telethon/GramJS) to inject messages.
+   */
+  inject?: {
+    /** Enable the injection endpoint for this account. */
+    enabled?: boolean;
+    /** Bearer token for authenticating injection requests. */
+    token?: string;
+  };
 };
 
 export type TelegramTopicConfig = {
