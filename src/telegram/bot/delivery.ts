@@ -1,8 +1,11 @@
 import { type Bot, GrammyError, InputFile } from "grammy";
-import { chunkMarkdownTextWithMode, type ChunkMode } from "../../auto-reply/chunk.js";
 import type { ReplyPayload } from "../../auto-reply/types.js";
 import type { ReplyToMode } from "../../config/config.js";
 import type { MarkdownTableMode } from "../../config/types.base.js";
+import type { RuntimeEnv } from "../../runtime.js";
+import type { TelegramInlineButtons } from "../button-types.js";
+import type { StickerMetadata, TelegramContext } from "./types.js";
+import { chunkMarkdownTextWithMode, type ChunkMode } from "../../auto-reply/chunk.js";
 import { danger, logVerbose, warn } from "../../globals.js";
 import { formatErrorMessage } from "../../infra/errors.js";
 import { retryAsync } from "../../infra/retry.js";
@@ -10,10 +13,8 @@ import { mediaKindFromMime } from "../../media/constants.js";
 import { fetchRemoteMedia } from "../../media/fetch.js";
 import { isGifMedia } from "../../media/mime.js";
 import { saveMediaBuffer } from "../../media/store.js";
-import type { RuntimeEnv } from "../../runtime.js";
 import { loadWebMedia } from "../../web/media.js";
 import { withTelegramApiErrorLogging } from "../api-logging.js";
-import type { TelegramInlineButtons } from "../button-types.js";
 import { splitTelegramCaption } from "../caption.js";
 import {
   markdownToTelegramChunks,
@@ -30,7 +31,6 @@ import {
   resolveTelegramReplyId,
   type TelegramThreadSpec,
 } from "./helpers.js";
-import type { StickerMetadata, TelegramContext } from "./types.js";
 
 const PARSE_ERR_RE = /can't parse entities|parse entities|find end of the entity/i;
 const EMPTY_TEXT_ERR_RE = /message text is empty/i;
@@ -320,6 +320,22 @@ export async function resolveMedia(
   stickerMetadata?: StickerMetadata;
 } | null> {
   const msg = ctx.message;
+
+  // Short-circuit for injected messages that already have media saved to disk
+  const injectPath = (msg as unknown as Record<string, unknown>)._inject_file_path;
+  if (typeof injectPath === "string" && injectPath) {
+    const injectType = (msg as unknown as Record<string, unknown>)._inject_content_type;
+    const contentType = typeof injectType === "string" ? injectType : undefined;
+    const placeholder = contentType?.startsWith("image/")
+      ? "<media:image>"
+      : contentType?.startsWith("video/")
+        ? "<media:video>"
+        : contentType?.startsWith("audio/")
+          ? "<media:audio>"
+          : "<media:document>";
+    return { path: injectPath, contentType, placeholder };
+  }
+
   const downloadAndSaveTelegramFile = async (filePath: string, fetchImpl: typeof fetch) => {
     const url = `https://api.telegram.org/file/bot${token}/${filePath}`;
     const fetched = await fetchRemoteMedia({
