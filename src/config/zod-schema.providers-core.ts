@@ -181,6 +181,7 @@ export const TelegramAccountSchemaBase = z
     streamMode: z.enum(["off", "partial", "block"]).optional(),
     mediaMaxMb: z.number().positive().optional(),
     timeoutSeconds: z.number().int().positive().optional(),
+    apiRoot: z.string().optional(),
     retry: RetryConfigSchema,
     network: z
       .object({
