@@ -71,7 +71,6 @@ import {
   type PluginRoutePathContext,
 } from "./server/plugins-http.js";
 import type { ReadinessChecker } from "./server/readiness.js";
-import type { GatewayWsClient } from "./server/ws-types.js";
 import { handleToolsInvokeHttpRequest } from "./tools-invoke-http.js";
 
 type SubsystemLogger = ReturnType<typeof createSubsystemLogger>;
