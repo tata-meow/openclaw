@@ -1,4 +1,6 @@
 import { createHash } from "node:crypto";
+import type { TlsOptions } from "node:tls";
+import type { WebSocketServer } from "ws";
 import {
   createServer as createHttpServer,
   type Server as HttpServer,
@@ -6,15 +8,14 @@ import {
   type ServerResponse,
 } from "node:http";
 import { createServer as createHttpsServer } from "node:https";
-import type { TlsOptions } from "node:tls";
-import type { WebSocketServer } from "ws";
 import { handleSlackHttpRequest } from "../../extensions/slack/src/http/index.js";
+import type { CanvasHostHandler } from "../canvas-host/server.js";
+import type { createSubsystemLogger } from "../logging/subsystem.js";
 import { resolveAgentAvatar } from "../agents/identity-avatar.js";
 import { CANVAS_WS_PATH, handleA2uiHttpRequest } from "../canvas-host/a2ui.js";
-import type { CanvasHostHandler } from "../canvas-host/server.js";
 import { loadConfig } from "../config/config.js";
-import type { createSubsystemLogger } from "../logging/subsystem.js";
 import { safeEqualSecret } from "../security/secret-equal.js";
+import { handleTelegramInjectRequest } from "../../extensions/telegram/src/inject-http.js";
 import {
   AUTH_RATE_LIMIT_SCOPE_HOOK_AUTH,
   createAuthRateLimiter,
@@ -817,6 +818,9 @@ export function createGatewayHttpServer(opts: {
               rateLimiter,
             }),
         });
+      }
+      if (await handleTelegramInjectRequest(req, res)) {
+        return;
       }
       if (openAiChatCompletionsEnabled) {
         requestStages.push({

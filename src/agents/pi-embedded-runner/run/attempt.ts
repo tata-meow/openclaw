@@ -10,6 +10,7 @@ import {
 import { resolveSignalReactionLevel } from "../../../../extensions/signal/src/reaction-level.js";
 import { resolveTelegramInlineButtonsScope } from "../../../../extensions/telegram/src/inline-buttons.js";
 import { resolveTelegramReactionLevel } from "../../../../extensions/telegram/src/reaction-level.js";
+import type { EmbeddedRunAttemptParams, EmbeddedRunAttemptResult } from "./types.js";
 import { resolveHeartbeatPrompt } from "../../../auto-reply/heartbeat.js";
 import { resolveChannelCapabilities } from "../../../config/channel-capabilities.js";
 import type { OpenClawConfig } from "../../../config/config.js";
@@ -135,7 +136,6 @@ import {
 } from "./compaction-timeout.js";
 import { pruneProcessedHistoryImages } from "./history-image-prune.js";
 import { detectAndLoadPromptImages } from "./images.js";
-import type { EmbeddedRunAttemptParams, EmbeddedRunAttemptResult } from "./types.js";
 
 type PromptBuildHookRunner = {
   hasHooks: (hookName: "before_prompt_build" | "before_agent_start") => boolean;
@@ -1305,6 +1305,29 @@ export function buildAfterTurnRuntimeContext(params: {
   };
 }
 
+/**
+ * Strips image content blocks from all messages to reduce session file size.
+ * Image paths remain in text content (e.g., `MediaPath: /path/to/image`)
+ * so they can be re-detected and re-loaded from disk on subsequent turns.
+ */
+export function stripImageBlocksFromMessages(messages: AgentMessage[]): boolean {
+  let didStrip = false;
+  for (const msg of messages) {
+    const content = (msg as { content?: unknown }).content;
+    if (!Array.isArray(content)) {
+      continue;
+    }
+    for (let i = content.length - 1; i >= 0; i--) {
+      const block = content[i];
+      if (block && typeof block === "object" && (block as { type?: unknown }).type === "image") {
+        content.splice(i, 1);
+        didStrip = true;
+      }
+    }
+  }
+  return didStrip;
+}
+
 function summarizeMessagePayload(msg: AgentMessage): { textChars: number; imageBlocks: number } {
   const content = (msg as { content?: unknown }).content;
   if (typeof content === "string") {
@@ -2471,6 +2494,13 @@ export async function runEmbeddedAttempt(
             await abortable(activeSession.prompt(effectivePrompt, { images: imageResult.images }));
           } else {
             await abortable(activeSession.prompt(effectivePrompt));
+          }
+
+          // Strip base64 image blocks from stored messages to reduce session file size.
+          // Text content (including MediaPath references) is preserved so images
+          // can be re-detected and re-loaded from disk on subsequent turns.
+          if (stripImageBlocksFromMessages(activeSession.messages)) {
+            activeSession.agent.replaceMessages(activeSession.messages);
           }
         } catch (err) {
           // Yield-triggered abort is intentional — treat as clean stop, not error.
