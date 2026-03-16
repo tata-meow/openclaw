@@ -67,6 +67,7 @@ export type AuditTelegramGroupMembershipParams = {
   proxyUrl?: string;
   network?: TelegramNetworkConfig;
   timeoutMs: number;
+  apiRoot?: string;
 };
 
 let auditMembershipRuntimePromise: Promise<typeof import("./audit-membership-runtime.js")> | null =

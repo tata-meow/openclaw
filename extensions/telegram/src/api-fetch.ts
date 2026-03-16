@@ -2,8 +2,10 @@ export async function fetchTelegramChatId(params: {
   token: string;
   chatId: string;
   signal?: AbortSignal;
+  apiRoot?: string;
 }): Promise<string | null> {
-  const url = `https://api.telegram.org/bot${params.token}/getChat?chat_id=${encodeURIComponent(params.chatId)}`;
+  const base = params.apiRoot?.replace(/\/+$/, "") || "https://api.telegram.org";
+  const url = `${base}/bot${params.token}/getChat?chat_id=${encodeURIComponent(params.chatId)}`;
   try {
     const res = await fetch(url, params.signal ? { signal: params.signal } : undefined);
     if (!res.ok) {
