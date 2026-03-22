@@ -202,8 +202,13 @@ export const dispatchTelegramMessage = async ({
   const canStreamAnswerDraft =
     previewStreamingEnabled && !accountBlockStreamingEnabled && !forceBlockStreamingForReasoning;
   const canStreamReasoningDraft = canStreamAnswerDraft || streamReasoningDraft;
+  // Skip reply-to for foreign bot messages — Telegram Bot API returns 400
+  // "replied message not found" when replying to another bot's message.
+  const senderIsForeignBot = msg.from?.is_bot === true && msg.from.id !== bot.botInfo.id;
   const draftReplyToMessageId =
-    replyToMode !== "off" && typeof msg.message_id === "number" ? msg.message_id : undefined;
+    replyToMode !== "off" && typeof msg.message_id === "number" && !senderIsForeignBot
+      ? msg.message_id
+      : undefined;
   const draftMinInitialChars = DRAFT_MIN_INITIAL_CHARS;
   // Keep DM preview lanes on real message transport. Native draft previews still
   // require a draft->message materialize hop, and that overlap keeps reintroducing

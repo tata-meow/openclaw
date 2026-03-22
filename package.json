@@ -1,6 +1,6 @@
 {
   "name": "openclaw",
-  "version": "2603.22.1300",
+  "version": "2603.22.1345",
   "description": "Multi-channel AI gateway with extensible messaging integrations",
   "keywords": [],
   "homepage": "https://github.com/openclaw/openclaw#readme",
@@ -546,7 +546,7 @@
   },
   "publishConfig": {
     "access": "public",
-    "name": "openclaw-cojad"
+    "name": "openclaw"
   },
   "scripts": {
     "android:assemble": "cd apps/android && ./gradlew :app:assemblePlayDebug",

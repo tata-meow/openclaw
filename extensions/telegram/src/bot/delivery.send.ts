@@ -9,12 +9,31 @@ import { buildTelegramThreadParams, type TelegramThreadSpec } from "./helpers.js
 const PARSE_ERR_RE = /can't parse entities|parse entities|find end of the entity/i;
 const EMPTY_TEXT_ERR_RE = /message text is empty/i;
 const THREAD_NOT_FOUND_RE = /message thread not found/i;
+const REPLY_NOT_FOUND_RE = /(?:message to be replied|replied message) not found/i;
 
 function isTelegramThreadNotFoundError(err: unknown): boolean {
   if (err instanceof GrammyError) {
     return THREAD_NOT_FOUND_RE.test(err.description);
   }
   return THREAD_NOT_FOUND_RE.test(formatErrorMessage(err));
+}
+
+function isTelegramReplyNotFoundError(err: unknown): boolean {
+  if (err instanceof GrammyError) {
+    return REPLY_NOT_FOUND_RE.test(err.description);
+  }
+  return REPLY_NOT_FOUND_RE.test(formatErrorMessage(err));
+}
+
+function hasReplyToParam(params: Record<string, unknown> | undefined): boolean {
+  if (!params) return false;
+  return typeof params.reply_to_message_id === "number" || params.reply_parameters != null;
+}
+
+function removeReplyToParam(params: Record<string, unknown> | undefined): Record<string, unknown> {
+  if (!params) return {};
+  const { reply_to_message_id: _a, reply_parameters: _b, ...rest } = params;
+  return rest;
 }
 
 function hasMessageThreadIdParam(params: Record<string, unknown> | undefined): boolean {
@@ -59,6 +78,18 @@ export async function sendTelegramWithThreadFallback<T>(params: {
     });
   } catch (err) {
     if (!allowThreadlessRetry || !hasThreadId || !isTelegramThreadNotFoundError(err)) {
+      // Reply-not-found fallback: retry without reply_to_message_id.
+      if (hasReplyToParam(params.requestParams) && isTelegramReplyNotFoundError(err)) {
+        const retryParams = removeReplyToParam(params.requestParams);
+        params.runtime.log?.(
+          `telegram ${params.operation}: replied message not found; retrying without reply_to_message_id`,
+        );
+        return await withTelegramApiErrorLogging({
+          operation: `${params.operation} (replyless retry)`,
+          runtime: params.runtime,
+          fn: () => params.send(retryParams),
+        });
+      }
       throw err;
     }
     const retryParams = removeMessageThreadIdParam(params.requestParams);

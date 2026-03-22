@@ -8,6 +8,8 @@ const TELEGRAM_STREAM_MAX_CHARS = 4096;
 const DEFAULT_THROTTLE_MS = 1000;
 const TELEGRAM_DRAFT_ID_MAX = 2_147_483_647;
 const THREAD_NOT_FOUND_RE = /400:\s*Bad Request:\s*message thread not found/i;
+const REPLY_NOT_FOUND_RE =
+  /400:\s*Bad Request:\s*(?:message to be replied|replied message) not found/i;
 const DRAFT_METHOD_UNAVAILABLE_RE =
   /(unknown method|method .*not (found|available|supported)|unsupported)/i;
 const DRAFT_CHAT_UNSUPPORTED_RE = /(can't be used|can be used only)/i;
@@ -180,6 +182,25 @@ export function createTelegramDraftStream(params: {
       };
     } catch (err) {
       if (!usedThreadParams || !THREAD_NOT_FOUND_RE.test(String(err))) {
+        // Reply-not-found fallback: retry without reply_to_message_id.
+        const usedReplyTo =
+          sendParams != null && "reply_to_message_id" in (sendParams as Record<string, unknown>);
+        if (usedReplyTo && REPLY_NOT_FOUND_RE.test(String(err))) {
+          const replylessParams = { ...(sendParams as Record<string, unknown>) };
+          delete replylessParams.reply_to_message_id;
+          delete replylessParams.reply_parameters;
+          params.warn?.(
+            "telegram draft preview: replied message not found; retrying without reply_to_message_id",
+          );
+          return {
+            sent: await params.api.sendMessage(
+              chatId,
+              sendArgs.renderedText,
+              Object.keys(replylessParams).length > 0 ? replylessParams : undefined,
+            ),
+            usedThreadParams,
+          };
+        }
         throw err;
       }
       const threadlessParams = {

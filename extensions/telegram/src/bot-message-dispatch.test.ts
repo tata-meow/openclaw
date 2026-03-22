@@ -2430,4 +2430,76 @@ describe("dispatchTelegramMessage draft streaming", () => {
     expect(generateTopicLabel).not.toHaveBeenCalled();
     expect(bot.api.editForumTopic).not.toHaveBeenCalled();
   });
+
+  it("skips draftReplyToMessageId when trigger is from a foreign bot", async () => {
+    const draftStream = createDraftStream();
+    createTelegramDraftStream.mockReturnValue(draftStream);
+    dispatchReplyWithBufferedBlockDispatcher.mockResolvedValue({ queuedFinal: false });
+
+    const context = createContext({
+      msg: {
+        chat: { id: 123, type: "private" },
+        message_id: 456,
+        message_thread_id: 777,
+        from: { id: 999, is_bot: true },
+      } as unknown as TelegramMessageContext["msg"],
+    });
+    const bot = createBot();
+    (bot as unknown as { botInfo: { id: number } }).botInfo = { id: 123 };
+    await dispatchWithContext({ context, bot });
+
+    expect(createTelegramDraftStream).toHaveBeenCalledWith(
+      expect.objectContaining({
+        replyToMessageId: undefined,
+      }),
+    );
+  });
+
+  it("preserves draftReplyToMessageId when trigger is from own bot", async () => {
+    const draftStream = createDraftStream();
+    createTelegramDraftStream.mockReturnValue(draftStream);
+    dispatchReplyWithBufferedBlockDispatcher.mockResolvedValue({ queuedFinal: false });
+
+    const context = createContext({
+      msg: {
+        chat: { id: 123, type: "private" },
+        message_id: 456,
+        message_thread_id: 777,
+        from: { id: 123, is_bot: true },
+      } as unknown as TelegramMessageContext["msg"],
+    });
+    const bot = createBot();
+    (bot as unknown as { botInfo: { id: number } }).botInfo = { id: 123 };
+    await dispatchWithContext({ context, bot });
+
+    expect(createTelegramDraftStream).toHaveBeenCalledWith(
+      expect.objectContaining({
+        replyToMessageId: 456,
+      }),
+    );
+  });
+
+  it("preserves draftReplyToMessageId when trigger is from a human", async () => {
+    const draftStream = createDraftStream();
+    createTelegramDraftStream.mockReturnValue(draftStream);
+    dispatchReplyWithBufferedBlockDispatcher.mockResolvedValue({ queuedFinal: false });
+
+    const context = createContext({
+      msg: {
+        chat: { id: 123, type: "private" },
+        message_id: 456,
+        message_thread_id: 777,
+        from: { id: 555, is_bot: false },
+      } as unknown as TelegramMessageContext["msg"],
+    });
+    const bot = createBot();
+    (bot as unknown as { botInfo: { id: number } }).botInfo = { id: 123 };
+    await dispatchWithContext({ context, bot });
+
+    expect(createTelegramDraftStream).toHaveBeenCalledWith(
+      expect.objectContaining({
+        replyToMessageId: 456,
+      }),
+    );
+  });
 });

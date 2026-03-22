@@ -153,6 +153,8 @@ function splitTelegramPlainTextFallback(text: string, chunkCount: number, limit:
 
 const PARSE_ERR_RE = /can't parse entities|parse entities|find end of the entity/i;
 const THREAD_NOT_FOUND_RE = /400:\s*Bad Request:\s*message thread not found/i;
+const REPLY_NOT_FOUND_RE =
+  /400:\s*Bad Request:\s*(?:message to be replied|replied message) not found/i;
 const MESSAGE_NOT_MODIFIED_RE =
   /400:\s*Bad Request:\s*message is not modified|MESSAGE_NOT_MODIFIED/i;
 const CHAT_NOT_FOUND_RE = /400: Bad Request: chat not found/i;
@@ -370,6 +372,21 @@ function isTelegramHtmlParseError(err: unknown): boolean {
   return PARSE_ERR_RE.test(formatErrorMessage(err));
 }
 
+function isTelegramReplyNotFoundError(err: unknown): boolean {
+  return REPLY_NOT_FOUND_RE.test(formatErrorMessage(err));
+}
+
+function hasReplyToParam(params?: Record<string, unknown>): boolean {
+  if (!params) return false;
+  return typeof params.reply_to_message_id === "number" || params.reply_parameters != null;
+}
+
+function removeReplyToParam(params?: Record<string, unknown>): Record<string, unknown> | undefined {
+  if (!params || !hasReplyToParam(params)) return params;
+  const { reply_to_message_id: _a, reply_parameters: _b, ...rest } = params;
+  return Object.keys(rest).length > 0 ? rest : undefined;
+}
+
 function buildTelegramThreadReplyParams(params: {
   targetMessageThreadId?: number;
   messageThreadId?: number;
@@ -521,6 +538,16 @@ async function withTelegramThreadFallback<T>(
     // Do not widen this fallback to cover "chat not found".
     // chat-not-found is routing/auth/membership/token; stripping thread IDs hides root cause.
     if (!hasMessageThreadIdParam(params) || !isTelegramThreadNotFoundError(err)) {
+      // Reply-not-found fallback: retry without reply_to_message_id.
+      if (hasReplyToParam(params) && isTelegramReplyNotFoundError(err)) {
+        if (verbose) {
+          sendLogger.warn(
+            `telegram ${label} failed with reply_to_message_id, retrying without reply: ${formatErrorMessage(err)}`,
+          );
+        }
+        const retriedParams = removeReplyToParam(params);
+        return await attempt(retriedParams, `${label}-replyless`);
+      }
       throw err;
     }
     if (verbose) {
