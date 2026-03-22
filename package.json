@@ -1,6 +1,6 @@
 {
   "name": "openclaw",
-  "version": "2026.3.14",
+  "version": "2603.22.1300",
   "description": "Multi-channel AI gateway with extensible messaging integrations",
   "keywords": [],
   "homepage": "https://github.com/openclaw/openclaw#readme",
@@ -14,7 +14,8 @@
     "url": "git+https://github.com/openclaw/openclaw.git"
   },
   "bin": {
-    "openclaw": "openclaw.mjs"
+    "openclaw": "openclaw.mjs",
+    "openclaw-cojad": "openclaw.mjs"
   },
   "directories": {
     "doc": "docs",
@@ -31,7 +32,10 @@
     "docs/",
     "!docs/.generated/**",
     "!docs/.i18n/zh-CN.tm.jsonl",
-    "skills/"
+    "extensions/",
+    "skills/",
+    "src/",
+    "apps/shared/OpenClawKit/Sources/OpenClawKit/Resources/tool-display.json"
   ],
   "type": "module",
   "main": "dist/index.js",
@@ -539,6 +543,10 @@
     },
     "./extension-api": "./dist/extensionAPI.js",
     "./cli-entry": "./openclaw.mjs"
+  },
+  "publishConfig": {
+    "access": "public",
+    "name": "openclaw-cojad"
   },
   "scripts": {
     "android:assemble": "cd apps/android && ./gradlew :app:assemblePlayDebug",

@@ -295,6 +295,13 @@ export const TelegramAccountSchemaBase = z
     ackReaction: z.string().optional(),
     apiRoot: z.string().url().optional(),
     autoTopicLabel: AutoTopicLabelSchema,
+    inject: z
+      .object({
+        enabled: z.boolean().optional(),
+        token: z.string().optional(),
+      })
+      .strict()
+      .optional(),
   })
   .strict();
 

@@ -220,6 +220,16 @@ export type TelegramAccountConfig = {
   apiRoot?: string;
   /** Auto-rename DM forum topics on first message using LLM. Default: true. */
   autoTopicLabel?: AutoTopicLabelConfig;
+  /**
+   * Telegram Update injection endpoint configuration.
+   * Allows external MTProto clients (Telethon/GramJS) to inject messages.
+   */
+  inject?: {
+    /** Enable the injection endpoint for this account. */
+    enabled?: boolean;
+    /** Bearer token for authenticating injection requests. */
+    token?: string;
+  };
 };
 
 export type TelegramTopicConfig = {
