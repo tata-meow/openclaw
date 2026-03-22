@@ -1,4 +1,4 @@
-import fs from "node:fs";
+import fs, { readFileSync } from "node:fs";
 import path from "node:path";
 import { defineConfig, type UserConfig } from "tsdown";
 import { shouldBuildBundledCluster } from "./scripts/lib/optional-bundled-clusters.mjs";
@@ -74,6 +74,7 @@ function nodeBuildConfig(config: UserConfig): UserConfig {
   return {
     ...config,
     env,
+    define,
     fixedExtension: false,
     platform: "node",
     inputOptions: buildInputOptions,
@@ -135,6 +136,27 @@ function listBundledPluginBuildEntries(): Record<string, string> {
 }
 
 const bundledPluginBuildEntries = listBundledPluginBuildEntries();
+
+/**
+ * Inject __OPENCLAW_VERSION__ at build time so `src/version.ts` can resolve the
+ * correct version string without relying on runtime package.json resolution.
+ *
+ * When OPENCLAW_VERSION_TAG is set (e.g. by a custom build script), the version
+ * is augmented with that tag as build metadata: `<version>+<tag>`.
+ * Otherwise, the plain package.json version is used.
+ *
+ * Fixes: https://github.com/openclaw/openclaw/issues/8912
+ */
+function buildDefine(): Record<string, string> {
+  const pkg = JSON.parse(readFileSync("package.json", "utf8")) as { version: string };
+  const versionTag = process.env.OPENCLAW_VERSION_TAG;
+  const version = versionTag ? `${pkg.version}+${versionTag}` : pkg.version;
+  return {
+    __OPENCLAW_VERSION__: JSON.stringify(version),
+  };
+}
+
+const define = buildDefine();
 
 function buildBundledHookEntries(): Record<string, string> {
   const hooksRoot = path.join(process.cwd(), "src", "hooks", "bundled");
