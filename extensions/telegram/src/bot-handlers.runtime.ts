@@ -107,6 +107,7 @@ import {
   shouldUseTelegramDmThreadSession,
   withResolvedTelegramForumFlag,
 } from "./bot/helpers.js";
+import { renderRichCommandText, renderRichMessageToText } from "./bot/rich-render.js";
 import type { TelegramContext, TelegramGetChat } from "./bot/types.js";
 import { getTelegramCallbackQueryAnswerPromise } from "./callback-query-answer-state.js";
 import { buildCommandsPaginationKeyboard, buildTelegramModelsMenuButtons } from "./command-ui.js";
@@ -303,6 +304,11 @@ export const registerTelegramHandlers = ({
   const resolveTelegramDebounceEntryMs = (entry: TelegramDebounceEntry): number =>
     entry.debounceLane === "forward" ? FORWARD_BURST_DEBOUNCE_MS : debounceMs;
   const shouldDebounceTelegramEntry = (entry: TelegramDebounceEntry): boolean => {
+    // rich_message messages flush individually: the debounce combine carries only .text,
+    // so coalescing would silently drop the flattened rich body. Never debounce them.
+    if (entry.msg.rich_message) {
+      return false;
+    }
     const text = getTelegramTextParts(entry.msg).text;
     const hasDebounceableText = shouldDebounceTextInbound({
       text,
@@ -424,6 +430,10 @@ export const registerTelegramHandlers = ({
     caption: undefined,
     caption_entities: undefined,
     entities: undefined,
+    // Synthetic text is the sole text source. Rich messages flush individually
+    // (shouldDebounceTelegramEntry excludes them), so a synthetic should never inherit a
+    // base's rich payload; clear it defensively so none can slip in and double-render.
+    rich_message: undefined,
     ...(params.date != null ? { date: params.date } : {}),
   });
   // grammy's Context.getFile reads update state via `this`; keep the receiver bound.
@@ -849,6 +859,12 @@ export const registerTelegramHandlers = ({
     if (!requireMention) {
       return false;
     }
+    // A rich_message can carry the bot mention / control command inside its blocks, which
+    // this text-only pre-download gate cannot see; don't skip — let the main inbound path
+    // gate it with the flattened rich text after download.
+    if (msg.rich_message) {
+      return false;
+    }
 
     const botUsername = ctx.me?.username?.trim().toLowerCase();
     const mentionRegexes = buildMentionRegexes(runtimeCfg, sessionState.agentId);
@@ -1209,12 +1225,17 @@ export const registerTelegramHandlers = ({
         return true;
       }
       const messageTextParts = getTelegramTextParts(node.sourceMessage);
+      // Fold rich plain text so a rich-only chain root that @mentions the bot inside its
+      // blocks activates the reply chain, matching the inbound body resolver.
+      const richPlain = node.sourceMessage.rich_message
+        ? renderRichMessageToText(node.sourceMessage.rich_message, "plain")
+        : "";
       const hasAnyMention = messageTextParts.entities.some((ent) => ent.type === "mention");
       const explicitlyMentioned = botUsername
-        ? hasBotMention(node.sourceMessage, botUsername)
+        ? hasBotMention(node.sourceMessage, botUsername, richPlain)
         : false;
       return matchesMentionWithExplicit({
-        text: messageTextParts.text,
+        text: [messageTextParts.text, richPlain].filter(Boolean).join("\n"),
         mentionRegexes,
         explicit: {
           hasAnyMention,
@@ -2012,7 +2033,12 @@ export const registerTelegramHandlers = ({
       dispatchDedupeKeys,
     } = params;
 
-    const messageText = getTelegramTextParts(msg).text;
+    // Fold rich prose (not code/quote) so an abort sent inside a rich message gets the fast
+    // cancel, matching the main command gate; renderRichCommandText excludes verbatim blocks.
+    const richCommandText = msg.rich_message ? renderRichCommandText(msg.rich_message) : "";
+    const messageText = [getTelegramTextParts(msg).text, richCommandText]
+      .filter(Boolean)
+      .join("\n");
     const botUsername = ctx.me?.username;
     const isAbortControlMessage = isAbortRequestText(messageText, { botUsername });
     let abortControlAuthorized: Promise<boolean> | undefined;
