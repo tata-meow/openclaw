@@ -14,6 +14,7 @@ export type TelegramBotInfo = {
   has_main_web_app: boolean;
   has_topics_enabled: boolean;
   allows_users_to_create_topics: boolean;
+  supports_join_request_queries: boolean;
 };
 
 function normalizeBoolean(value: unknown): boolean | null {
@@ -48,5 +49,6 @@ export function normalizeTelegramBotInfo(value: unknown): TelegramBotInfo | unde
     has_main_web_app: normalizeBoolean(bot.has_main_web_app) ?? false,
     has_topics_enabled: normalizeBoolean(bot.has_topics_enabled) ?? false,
     allows_users_to_create_topics: normalizeBoolean(bot.allows_users_to_create_topics) ?? false,
+    supports_join_request_queries: normalizeBoolean(bot.supports_join_request_queries) ?? false,
   };
 }

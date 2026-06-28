@@ -122,6 +122,9 @@ overrides:
   yauzl: 3.2.1
   protobufjs: 7.6.3
   uuid: 14.0.0
+  # Bot API 10.1 rich_message types (inbound rich message support); dedupe grammy's
+  # exact-pinned nested copy so grammy/types re-export exposes RichMessage/RichBlock.
+  "@grammyjs/types": 3.28.0
 
 allowBuilds:
   "@openclaw/fs-safe": true

@@ -7,11 +7,13 @@ import { parseStrictPositiveInteger } from "openclaw/plugin-sdk/number-runtime";
 import type { MsgContext } from "openclaw/plugin-sdk/reply-runtime";
 import { logVerbose } from "openclaw/plugin-sdk/runtime-env";
 import { isRecord } from "openclaw/plugin-sdk/string-coerce-runtime";
-import { resolveTelegramPrimaryMedia, resolveTelegramRichMessageBody } from "./bot/body-helpers.js";
+import {
+  resolveTelegramPrimaryMedia,
+  resolveTelegramRichFallbackText,
+} from "./bot/body-helpers.js";
 import {
   buildSenderName,
   extractTelegramLocation,
-  getTelegramTextParts,
   normalizeForwardedContext,
 } from "./bot/helpers.js";
 import { parseTelegramMessageThreadId } from "./outbound-params.js";
@@ -147,7 +149,9 @@ function resolveEmbeddedReplyMessage(msg: Message): Message | undefined {
 }
 
 function resolveMessageBody(msg: Message): string | undefined {
-  const text = getTelegramTextParts(msg).text.trim();
+  // Falls back to flattened rich_message so a replied-to / cached rich message contributes
+  // its content to reply-chain context instead of being dropped.
+  const text = resolveTelegramRichFallbackText(msg).trim();
   if (text) {
     return text;
   }
@@ -155,7 +159,7 @@ function resolveMessageBody(msg: Message): string | undefined {
   if (location) {
     return formatLocationText(location);
   }
-  return resolveTelegramRichMessageBody(msg) ?? resolveTelegramPrimaryMedia(msg)?.placeholder;
+  return resolveTelegramPrimaryMedia(msg)?.placeholder;
 }
 
 function resolveMediaType(placeholder?: string): string | undefined {

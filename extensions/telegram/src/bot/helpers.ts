@@ -41,9 +41,7 @@ import {
   renderTelegramTextEntities,
   resolveTelegramTextContent,
   resolveTelegramMediaPlaceholder,
-  resolveTelegramRichMessageBody,
-  resolveTelegramRichMessagePlaceholder,
-  resolveTelegramRichMessageText,
+  resolveTelegramRichFallbackText,
   type TelegramForwardedContext,
   type TelegramTextEntity,
 } from "./body-helpers.js";
@@ -61,9 +59,6 @@ export {
   normalizeForwardedContext,
   renderTelegramTextEntities,
   resolveTelegramMediaPlaceholder,
-  resolveTelegramRichMessageBody,
-  resolveTelegramRichMessagePlaceholder,
-  resolveTelegramRichMessageText,
 };
 
 const TELEGRAM_GENERAL_TOPIC_ID = 1;
@@ -635,7 +630,10 @@ export function describeReplyTarget(msg: Message): TelegramReplyTarget | null {
   const safeReplyText = replyTextParts?.text ?? "";
   let filteredReplyText = false;
   if (!body && replyLike) {
-    const replyBody = safeReplyText.trim() || resolveTelegramRichMessageBody(replyLike) || "";
+    // Replying to a rich message: flatten its blocks so the quoted context isn't empty
+    // (replaces the upstream fixed-string placeholder with the actual rich content).
+    const replyBody =
+      safeReplyText.trim() || resolveTelegramRichFallbackText(replyLike).trim() || "";
     filteredReplyText = hadUnsafeTelegramText(rawReplyText, replyBody);
     body = replyBody;
     if (!body) {

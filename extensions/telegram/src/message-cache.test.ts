@@ -558,7 +558,7 @@ describe("telegram message cache", () => {
     expect(recent.map((entry) => entry.messageId)).toEqual(["42", "43"]);
   });
 
-  it("preserves rich-message placeholders in subsequent conversation context", async () => {
+  it("preserves flattened rich-message content in subsequent conversation context", async () => {
     const cache = createTelegramMessageCache();
     const chat = { id: 7, type: "private", first_name: "Nora" } as const;
     await cache.record({
@@ -568,7 +568,7 @@ describe("telegram message cache", () => {
         chat,
         message_id: 45,
         date: 1736380745,
-        rich_message: { blocks: [{ type: "paragraph" }] },
+        rich_message: { blocks: [{ type: "paragraph", text: ["Rich note 45"] }] },
         from: { id: 1, is_bot: false, first_name: "Nora" },
       } as Message,
     });
@@ -597,7 +597,7 @@ describe("telegram message cache", () => {
     expect(context).toHaveLength(1);
     expect(context[0]?.node).toMatchObject({
       messageId: "45",
-      body: "[unsupported Telegram rich_message received]",
+      body: "Rich note 45",
     });
   });
 
