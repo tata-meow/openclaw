@@ -83,22 +83,7 @@ function transcribeCallContext(index = 0): Record<string, unknown> {
 }
 
 describe("resolveTelegramInboundBody", () => {
-  it("delivers rich-message-only updates as a sanitized placeholder", async () => {
-    const result = await resolveTelegramBody({
-      msg: {
-        message_id: 0,
-        date: 1_700_000_000,
-        chat: { id: 42, type: "private", first_name: "Pat" },
-        from: { id: 42, first_name: "Pat" },
-        rich_message: { blocks: [{ type: "paragraph" }] },
-      } as never,
-    });
-
-    expect(result?.rawBody).toBe("[unsupported Telegram rich_message received]");
-    expect(result?.bodyText).toBe("[unsupported Telegram rich_message received]");
-  });
-
-  it("keeps rich-message placeholders quiet in requireMention groups", async () => {
+  it("keeps unmentioned rich messages quiet in requireMention groups", async () => {
     const logger = { info: vi.fn() };
     const result = await resolveTelegramBody({
       cfg: {
@@ -110,7 +95,7 @@ describe("resolveTelegramInboundBody", () => {
         date: 1_700_000_001,
         chat: { id: -1001234567890, type: "supergroup", title: "Test Group" },
         from: { id: 42, first_name: "Pat" },
-        rich_message: { blocks: [{ type: "paragraph" }] },
+        rich_message: { blocks: [{ type: "paragraph", text: ["just chatter, no mention"] }] },
       } as never,
       isGroup: true,
       chatId: -1001234567890,
@@ -637,6 +622,117 @@ describe("resolveTelegramInboundBody", () => {
       }),
     );
     expect(triggerInternalHookMock).toHaveBeenCalledOnce();
+  });
+
+  it("flattens a rich-only message body so it is not dropped at the empty-body guard", async () => {
+    // Regression guard: rich-only messages carry no text/caption, so before rich
+    // support they fell through the empty-body return null. The flattened rich
+    // markdown must now become the body.
+    const result = await resolveTelegramBody({
+      msg: {
+        message_id: 20,
+        date: 1_700_000_020,
+        chat: { id: 42, type: "private", first_name: "Pat" },
+        from: { id: 42, first_name: "Pat" },
+        rich_message: {
+          blocks: [
+            { type: "paragraph", text: ["Hello from ", { type: "bold", text: "rich" }, " text"] },
+          ],
+        },
+      } as never,
+    });
+
+    expect(result).not.toBeNull();
+    expect(result?.rawBody).toBe("Hello from **rich** text");
+    expect(result?.bodyText).toBe("Hello from **rich** text");
+  });
+
+  it("detects control commands carried only by rich content", async () => {
+    const result = await resolveTelegramBody({
+      msg: {
+        message_id: 21,
+        date: 1_700_000_021,
+        chat: { id: 42, type: "private", first_name: "Pat" },
+        from: { id: 42, first_name: "Pat" },
+        rich_message: {
+          blocks: [{ type: "paragraph", text: ["/help"] }],
+        },
+      } as never,
+    });
+
+    expect(result?.hasControlCommand).toBe(true);
+    expect(result?.rawBody).toBe("/help");
+  });
+
+  it("treats a bot mention inside rich content as an explicit mention", async () => {
+    const result = await resolveTelegramBody({
+      msg: {
+        message_id: 22,
+        date: 1_700_000_022,
+        chat: { id: 42, type: "private", first_name: "Pat" },
+        from: { id: 42, first_name: "Pat" },
+        rich_message: {
+          blocks: [{ type: "paragraph", text: ["hey @bot please help"] }],
+        },
+      } as never,
+    });
+
+    expect(result?.effectiveWasMentioned).toBe(true);
+    expect(result?.rawBody).toBe("hey @bot please help");
+  });
+
+  it("surfaces the rich placeholder when rich blocks are empty and there is no text or media", async () => {
+    const result = await resolveTelegramBody({
+      msg: {
+        message_id: 23,
+        date: 1_700_000_023,
+        chat: { id: 42, type: "private", first_name: "Pat" },
+        from: { id: 42, first_name: "Pat" },
+        rich_message: { blocks: [] },
+      } as never,
+    });
+
+    // A rich_message must never be silently dropped: an empty flatten falls back to the marker.
+    expect(result?.rawBody).toBe("[Telegram rich message]");
+  });
+
+  it("surfaces the rich placeholder when rich content flattens to empty plain text with no text or media", async () => {
+    // A divider-only message renders to "" in plain mode; rather than dropping it, the
+    // empty-flatten fallback surfaces the marker so the message stays visible.
+    const result = await resolveTelegramBody({
+      msg: {
+        message_id: 24,
+        date: 1_700_000_024,
+        chat: { id: 42, type: "private", first_name: "Pat" },
+        from: { id: 42, first_name: "Pat" },
+        rich_message: { blocks: [{ type: "divider" }] },
+      } as never,
+    });
+
+    expect(result?.rawBody).toBe("[Telegram rich message]");
+  });
+
+  it("concatenates caption and flattened rich content when both are present", async () => {
+    const result = await resolveTelegramBody({
+      msg: {
+        message_id: 25,
+        date: 1_700_000_025,
+        chat: { id: 42, type: "private", first_name: "Pat" },
+        from: { id: 42, first_name: "Pat" },
+        caption: "photo caption",
+        photo: [{ file_id: "photo-rich", file_unique_id: "photo-rich-u", width: 120, height: 80 }],
+        rich_message: {
+          blocks: [{ type: "paragraph", text: ["extra rich note"] }],
+        },
+      } as never,
+    });
+
+    expect(result?.rawBody).toBe("photo caption\nextra rich note");
+    expect(result?.bodyText).toContain("photo caption");
+    expect(result?.bodyText).toContain("extra rich note");
+    expect(result?.bodyText).toBe(
+      "<media:image> [file_id:photo-rich]\nphoto caption\nextra rich note",
+    );
   });
 
   it("escapes transcript text before embedding it in the audio framing", async () => {
