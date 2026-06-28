@@ -40,11 +40,13 @@ import {
   extractTelegramLocation,
   getTelegramTextParts,
   hasBotMention,
+  isBinaryContent,
   renderTelegramTextEntities,
   resolveTelegramPrimaryMedia,
-  resolveTelegramRichMessagePlaceholder,
+  TELEGRAM_RICH_MESSAGE_PLACEHOLDER,
 } from "./bot/body-helpers.js";
 import { buildTelegramGroupPeerId, buildTelegramInboundOriginTarget } from "./bot/helpers.js";
+import { renderRichCommandText, renderRichMessageToText } from "./bot/rich-render.js";
 import type { TelegramContext } from "./bot/types.js";
 import { isTelegramForumServiceMessage } from "./forum-service-message.js";
 import { resolveTelegramCommandIngressAuthorization } from "./ingress.js";
@@ -229,9 +231,32 @@ export async function resolveTelegramInboundBody(params: {
     providerPolicy: providerMentionPatterns,
   });
   const messageTextParts = getTelegramTextParts(msg);
+  // Inbound rich_message is flattened here — the only place that needs the rich body —
+  // so getTelegramTextParts stays cheap/text-only for the many hot callers (debounce, gates).
+  let richMarkdown = "";
+  let richPlain = "";
+  if (msg.rich_message) {
+    const flatPlain = renderRichMessageToText(msg.rich_message, "plain");
+    // Plain strips structure-only blocks (a lone divider -> ""); empty plain means no real
+    // content, so the message stays empty and drops at the body guard below as before.
+    if (flatPlain && !isBinaryContent(flatPlain)) {
+      richPlain = flatPlain;
+      const md = renderRichMessageToText(msg.rich_message, "markdown");
+      // markdown also emits url/mailto/tel targets plain omits; if those drag in control
+      // chars, fall back to the already-clean plain text rather than dropping a real message.
+      richMarkdown = isBinaryContent(md) ? richPlain : md;
+    }
+  }
+  // gatingText folds full rich plain text into mention gating so rich-only messages can
+  // address the bot anywhere in their blocks like text/caption does.
+  const gatingText = [messageTextParts.text, richPlain].filter(Boolean).join("\n");
+  // Command gating is stricter: only prose blocks count, so a code/quote block beginning
+  // with "/cmd" is not misread as a typed control command.
+  const richCommandText = msg.rich_message ? renderRichCommandText(msg.rich_message) : "";
+  const commandText = [messageTextParts.text, richCommandText].filter(Boolean).join("\n");
   const allowForCommands = isGroup ? effectiveGroupAllow : effectiveDmAllow;
   const useAccessGroups = cfg.commands?.useAccessGroups !== false;
-  const hasControlCommandInMessage = hasControlCommand(messageTextParts.text, cfg, {
+  const hasControlCommandInMessage = hasControlCommand(commandText, cfg, {
     botUsername,
   });
   const commandGate = await resolveTelegramCommandIngressAuthorization({
@@ -271,14 +296,19 @@ export async function resolveTelegramInboundBody(params: {
 
   const locationData = extractTelegramLocation(msg);
   const locationText = locationData ? formatLocationText(locationData) : undefined;
-  const rawText = renderTelegramTextEntities(
+  const baseRendered = renderTelegramTextEntities(
     messageTextParts.text,
     messageTextParts.entities,
   ).trim();
+  // Append flattened rich markdown after the base text/caption so rich-only
+  // messages produce body text and no longer drop at the empty-body guard below.
+  const rawText = [baseRendered, richMarkdown].filter(Boolean).join("\n").trim();
   const hasUserText = Boolean(rawText || locationText);
   let rawBody = [rawText, locationText].filter(Boolean).join("\n").trim();
   if (!rawBody) {
-    rawBody = resolveTelegramRichMessagePlaceholder(msg) ?? placeholder;
+    // A rich_message that flattened to nothing readable still must not vanish: fall back to
+    // the marker so it surfaces instead of dropping at the empty-body guard below.
+    rawBody = placeholder || (msg.rich_message ? TELEGRAM_RICH_MESSAGE_PLACEHOLDER : "");
   }
   if (!rawBody && allMedia.length === 0) {
     return null;
@@ -366,9 +396,9 @@ export async function resolveTelegramInboundBody(params: {
   }
 
   const hasAnyMention = messageTextParts.entities.some((ent) => ent.type === "mention");
-  const explicitlyMentioned = botUsername ? hasBotMention(msg, botUsername) : false;
+  const explicitlyMentioned = botUsername ? hasBotMention(msg, botUsername, richPlain) : false;
   const computedWasMentioned = matchesMentionWithExplicit({
-    text: messageTextParts.text,
+    text: gatingText,
     mentionRegexes,
     explicit: {
       hasAnyMention,

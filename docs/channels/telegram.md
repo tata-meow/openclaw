@@ -312,6 +312,7 @@ curl "https://api.telegram.org/bot<bot_token>/getUpdates"
 - Telegram is owned by the gateway process.
 - Routing is deterministic: Telegram inbound replies back to Telegram (the model does not pick channels).
 - Inbound messages normalize into the shared channel envelope with reply metadata, media placeholders, and persisted reply-chain context for Telegram replies the gateway has observed.
+- Inbound rich messages are flattened into a Markdown body so rich-only messages are not dropped; the original blocks are preserved by the SQLite ingress spool, and the flattened text also participates in mention and command gating.
 - Group sessions are isolated by group ID. Forum topics append `:topic:<threadId>` to keep topics isolated.
 - DM messages can carry `message_thread_id`; OpenClaw preserves it for replies. DM topic sessions split only when Telegram `getMe` reports `has_topics_enabled: true` for the bot; otherwise DMs stay on the flat session.
 - Long polling uses grammY runner with per-chat/per-thread sequencing. Overall runner sink concurrency uses `agents.defaults.maxConcurrent`.
@@ -449,6 +450,16 @@ curl "https://api.telegram.org/bot<bot_token>/getUpdates"
     Default: off for client compatibility. Rich messages require compatible Telegram clients; some current Desktop, Web, Android, and third-party clients display accepted rich messages as unsupported. Keep this option disabled unless every client used with the bot can render them. `/status` shows whether the current Telegram session has rich messages on or off.
 
     Link previews are enabled by default. `channels.telegram.linkPreview: false` skips automatic entity detection for rich text.
+
+    ### Inbound rich messages
+
+    Inbound Telegram rich messages are flattened into a Markdown body, so rich-only messages are processed instead of dropped. Any accompanying caption or text is rendered first, then the flattened rich content follows. The original blocks are preserved by the SQLite ingress spool, and the flattened text participates in mention and command gating. Replying to a rich message (including an external reply to one) flattens the replied-to rich content the same way, so reply and quote context is populated instead of empty.
+
+    Known degradations:
+
+    - Tables render as GitHub-flavored Markdown pipe tables. The first row becomes the header, and colspan/rowspan collapse to single cells because Markdown has no span syntax. Math blocks render as `$$...$$`, maps as a `<media:map>` placeholder with coordinates, and details, collages, and slideshows render their summary or caption plus nested content. Only unknown future block types fall back to text-or-nested-content extraction.
+    - Embedded rich media (photos, videos, audio, voice notes) become `<media:*>` placeholders plus the block caption text; this media is not downloaded as an attachment.
+    - Rich-only messages are processed individually and are not coalesced in the debounce lane that batches consecutive plain-text messages.
 
   </Accordion>
 
