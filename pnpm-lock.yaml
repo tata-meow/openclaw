@@ -33,6 +33,7 @@ overrides:
   yauzl: 3.2.1
   protobufjs: 7.6.3
   uuid: 14.0.0
+  '@grammyjs/types': 3.28.0
 
 packageExtensionsChecksum: sha256-zZ8fyodhMTumshonC7kktCqTPsiHL3UAyS9vltFAlMo=
 
@@ -213,8 +214,8 @@ importers:
         specifier: 1.27.3
         version: 1.27.3(vitest@4.1.8)
       '@grammyjs/types':
-        specifier: 3.27.3
-        version: 3.27.3
+        specifier: 3.28.0
+        version: 3.28.0
       '@lit-labs/signals':
         specifier: 0.3.0
         version: 0.3.0
@@ -2766,8 +2767,8 @@ packages:
     peerDependencies:
       grammy: ^1.0.0
 
-  '@grammyjs/types@3.27.3':
-    resolution: {integrity: sha512-yUKMLliGsGbnxu96YUJ7km7B0zy4PzeH/Jvti5705R/LeKDMqkDV4DckMSt+OrliWQpTwQljHE0QLol5zgxBkg==}
+  '@grammyjs/types@3.28.0':
+    resolution: {integrity: sha512-4JvXCdxRZHCje0M4gHzLwtB4bLno3WD28xd8CNfk4POWIu73BFnSvGeW6OQ5gPem4eYTEwkD9yDaXssixl6tMQ==}
 
   '@grpc/grpc-js@1.14.4':
     resolution: {integrity: sha512-k9Dj3DV/itK9D06Y8f190Qgop7/Ui+D0njFV3LHMPwPT75DpXLQohE9Wmz0QElrJnzsjB7KPWiKJbOl7IPDArQ==}
@@ -8835,7 +8836,7 @@ snapshots:
       bottleneck: 2.19.5
       grammy: 1.43.0
 
-  '@grammyjs/types@3.27.3': {}
+  '@grammyjs/types@3.28.0': {}
 
   '@grpc/grpc-js@1.14.4':
     dependencies:
@@ -11680,7 +11681,7 @@ snapshots:
 
   grammy@1.43.0:
     dependencies:
-      '@grammyjs/types': 3.27.3
+      '@grammyjs/types': 3.28.0
       abort-controller: 3.0.0
       debug: 4.4.3
       node-fetch: 2.7.0
