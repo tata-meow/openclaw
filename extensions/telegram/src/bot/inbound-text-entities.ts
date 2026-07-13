@@ -59,15 +59,15 @@ function longestBacktickRun(text: string): number {
   return longest;
 }
 
-function markdownInlineCodeDelimiters(content: string): [string, string] {
+export function markdownInlineCodeDelimiters(content: string): [string, string] {
   const delimiter = "`".repeat(longestBacktickRun(content) + 1);
   // CommonMark normalizes line breaks to spaces and never strips all-space code.
   const padding = /^[ \r\n`]|[ \r\n`]$/u.test(content) && /[^ \r\n]/u.test(content) ? " " : "";
   return [`${delimiter}${padding}`, `${padding}${delimiter}`];
 }
 
-function markdownPreAffixes(
-  entity: Extract<MessageEntity, { type: "pre" }>,
+export function markdownPreAffixes(
+  entity: { language?: string },
   content: string,
 ): [string, string] {
   const language = entity.language?.replace(/[\s`]+/g, "").trim();
