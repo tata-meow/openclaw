@@ -51,7 +51,9 @@ import {
   hasBotMentionInText,
   hasBotMention,
   resolveTelegramPrimaryMedia,
+  resolveTelegramRichMessageCommandText,
   resolveTelegramRichMessagePlaceholder,
+  resolveTelegramRichMessagePlainText,
   resolveTelegramRichMessageText,
 } from "./bot/body-helpers.js";
 import {
@@ -216,7 +218,11 @@ export async function resolveTelegramInboundBody(params: {
   }
   const allowForCommands = isGroup ? effectiveGroupAllow : effectiveDmAllow;
   const useAccessGroups = true;
-  const hasControlCommandInMessage = hasControlCommand(messageTextParts.text, cfg, {
+  // Fold prose-only rich text into command detection so a "/cmd" typed in a rich-only message
+  // is recognized; code/quote blocks are excluded by renderRichCommandText.
+  const richCommandText = resolveTelegramRichMessageCommandText(msg);
+  const commandText = [messageTextParts.text, richCommandText].filter(Boolean).join("\n");
+  const hasControlCommandInMessage = hasControlCommand(commandText, cfg, {
     botUsername,
   });
   const commandGate = await resolveTelegramCommandIngressAuthorization({
@@ -275,9 +281,12 @@ export async function resolveTelegramInboundBody(params: {
     messageTextParts.text,
     messageTextParts.entities,
   ).trim();
+  // Body carries full Markdown fidelity; gating uses the plain flatten so Markdown affixes
+  // (pipes, headings, $$) never skew mention regexes.
   const richText = resolveTelegramRichMessageText(msg);
-  const hasUserText = Boolean(rawText || locationText);
-  let rawBody = [rawText, locationText].filter(Boolean).join("\n").trim();
+  const richPlain = resolveTelegramRichMessagePlainText(msg);
+  const hasUserText = Boolean(rawText || richText || locationText);
+  let rawBody = [rawText, richText, locationText].filter(Boolean).join("\n").trim();
   if (!rawBody) {
     rawBody = richText ?? resolveTelegramRichMessagePlaceholder(msg) ?? "";
   }
@@ -346,20 +355,22 @@ export async function resolveTelegramInboundBody(params: {
   const hasAnyMention = messageTextParts.entities.some((ent) => ent.type === "mention");
   const explicitlyMentioned = botUsername
     ? hasBotMention(msg, botUsername, primaryCtx.me?.id) ||
-      (richText ? hasBotMentionInText(richText, botUsername) : false)
+      (richPlain ? hasBotMentionInText(richPlain, botUsername) : false)
     : false;
+  // Mention matching (bot + group-thread agents) reads the plain flatten, never the Markdown
+  // body, so rich affixes (`**`, `|`, `$$`) cannot split or hide a name from the regexes.
   const groupThread = resolveGroupThreadMentionFacts({
     cfg,
     channel: "telegram",
     peerId: isGroup ? String(chatId) : resolveTelegramDirectPeerId({ chatId, senderId }),
-    text: [messageTextParts.text, richText, preflightTranscript].filter(Boolean).join("\n"),
+    text: [messageTextParts.text, richPlain, preflightTranscript].filter(Boolean).join("\n"),
     sessionKey: params.sessionKey,
     acpBinding: params.acpBinding,
   });
   const computedWasMentioned =
     Boolean(groupThread?.mentionedAgentIds.length) ||
     matchesMentionWithExplicit({
-      text: messageTextParts.text || richText || "",
+      text: messageTextParts.text || richPlain || "",
       mentionRegexes,
       explicit: {
         hasAnyMention,
