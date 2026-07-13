@@ -271,7 +271,7 @@ describe("resolveTelegramInboundBody", () => {
     richMessage({
       blocks: [{ type: "paragraph", text: ["Forwarded ", { type: "bold", text: "rich text" }] }],
     }),
-    (result) => expect(result?.rawBody).toBe("Forwarded rich text"),
+    (result) => expect(result?.rawBody).toBe("Forwarded **rich text**"),
   );
 
   it("extracts markdown and html rich-message text", async () => {
@@ -303,8 +303,10 @@ describe("resolveTelegramInboundBody", () => {
       ],
     }),
     (result) => {
-      expect(result?.rawBody).toBe("Run summary\n1.\nCI clean\na^2+b^2=c^2\nChart\nOpenClaw");
-      expect(result?.bodyText).toBe("Run summary\n1.\nCI clean\na^2+b^2=c^2\nChart\nOpenClaw");
+      const expected =
+        "**Run summary**\n\n- **1.** CI clean\n\n$$a^2+b^2=c^2$$\n\n<media:image>\nChart\n— OpenClaw";
+      expect(result?.rawBody).toBe(expected);
+      expect(result?.bodyText).toBe(expected);
     },
   );
 
@@ -322,9 +324,30 @@ describe("resolveTelegramInboundBody", () => {
       ],
     }),
     (result) => {
-      expect(result?.rawBody).toBe("Total Q1");
-      expect(result?.bodyText).toBe("Total Q1");
+      expect(result?.rawBody).toBe("Total **Q1**");
+      expect(result?.bodyText).toBe("Total **Q1**");
     },
+  );
+
+  privateBodyTest(
+    "renders rich-message tables as GFM pipe tables",
+    richMessage({
+      blocks: [
+        {
+          type: "table",
+          cells: [
+            [
+              { text: "Name", is_header: true },
+              { text: "Score", is_header: true },
+            ],
+            [{ text: "Pat" }, { text: "9 | 10" }],
+          ],
+          caption: "Results",
+        },
+      ],
+    }),
+    (result) =>
+      expect(result?.rawBody).toBe("| Name | Score |\n| --- | --- |\n| Pat | 9 \\| 10 |\nResults"),
   );
 
   groupBodyTest(
