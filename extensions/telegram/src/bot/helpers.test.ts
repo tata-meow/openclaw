@@ -507,7 +507,8 @@ describe("describeReplyTarget", () => {
     } as never);
 
     expect(result?.body).toBe(
-      "Run summary\n1.\nCI clean\na^2+b^2=c^2\nChart\nOpenClaw\nCopy result",
+      "**Run summary**\n\n- **1.** CI clean\n\n$$a^2+b^2=c^2$$\n\n" +
+        "<media:image>\nChart\n— OpenClaw\n\nCopy result",
     );
     expect(result?.quoteSourceText).toBeUndefined();
   });
