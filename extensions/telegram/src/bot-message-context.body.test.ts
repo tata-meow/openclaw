@@ -138,7 +138,7 @@ describe("resolveTelegramInboundBody", () => {
       } as never,
     });
 
-    expect(result?.rawBody).toBe("Forwarded rich text");
+    expect(result?.rawBody).toBe("Forwarded **rich text**");
   });
 
   it("extracts markdown and html rich-message text", async () => {
@@ -210,8 +210,10 @@ describe("resolveTelegramInboundBody", () => {
       } as never,
     });
 
-    expect(result?.rawBody).toBe("Run summary\n1.\nCI clean\na^2+b^2=c^2\nChart\nOpenClaw");
-    expect(result?.bodyText).toBe("Run summary\n1.\nCI clean\na^2+b^2=c^2\nChart\nOpenClaw");
+    const expected =
+      "**Run summary**\n\n- **1.** CI clean\n\n$$a^2+b^2=c^2$$\n\n<media:image>\nChart\n— OpenClaw";
+    expect(result?.rawBody).toBe(expected);
+    expect(result?.bodyText).toBe(expected);
   });
 
   it("keeps rich-message table caption spans inline", async () => {
@@ -235,8 +237,36 @@ describe("resolveTelegramInboundBody", () => {
       } as never,
     });
 
-    expect(result?.rawBody).toBe("Total Q1");
-    expect(result?.bodyText).toBe("Total Q1");
+    expect(result?.rawBody).toBe("Total **Q1**");
+    expect(result?.bodyText).toBe("Total **Q1**");
+  });
+
+  it("renders rich-message tables as GFM pipe tables", async () => {
+    const result = await resolveTelegramBody({
+      msg: {
+        message_id: 0,
+        date: 1_700_000_000,
+        chat: { id: 42, type: "private", first_name: "Pat" },
+        from: { id: 42, first_name: "Pat" },
+        rich_message: {
+          blocks: [
+            {
+              type: "table",
+              cells: [
+                [
+                  { text: "Name", is_header: true },
+                  { text: "Score", is_header: true },
+                ],
+                [{ text: "Pat" }, { text: "9 | 10" }],
+              ],
+              caption: "Results",
+            },
+          ],
+        },
+      } as never,
+    });
+
+    expect(result?.rawBody).toBe("| Name | Score |\n| --- | --- |\n| Pat | 9 \\| 10 |\nResults");
   });
 
   it("keeps rich-message placeholders quiet in requireMention groups", async () => {
