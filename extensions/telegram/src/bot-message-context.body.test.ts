@@ -439,7 +439,7 @@ describe("Telegram admitted model input", () => {
     });
     const input = harness.replySpy.mock.calls[0]?.[0];
     expect(input?.BodyForAgent).toBe(
-      "@openclaw_bot review\nRun summary\n1.\nCI clean\na^2+b^2=c^2\nChart\nOpenClaw\nTotal Q1\n42",
+      "@openclaw_bot **review**\n\n## Run summary\n\n- **1.** CI clean\n\n$$a^2+b^2=c^2$$\n\n<media:image>\nChart\n— OpenClaw\n\n| 42 |\n| --- |\nTotal **Q1**",
     );
     expect(input?.Body).toContain("Alice (42001): @openclaw_bot review");
   });
