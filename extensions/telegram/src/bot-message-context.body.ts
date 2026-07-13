@@ -48,7 +48,9 @@ import {
   hasBotMention,
   renderTelegramTextEntities,
   resolveTelegramPrimaryMedia,
+  resolveTelegramRichMessageCommandText,
   resolveTelegramRichMessagePlaceholder,
+  resolveTelegramRichMessagePlainText,
   resolveTelegramRichMessageText,
 } from "./bot/body-helpers.js";
 import { buildTelegramGroupPeerId, buildTelegramInboundOriginTarget } from "./bot/helpers.js";
@@ -232,7 +234,11 @@ export async function resolveTelegramInboundBody(params: {
   const messageTextParts = getTelegramTextParts(msg);
   const allowForCommands = isGroup ? effectiveGroupAllow : effectiveDmAllow;
   const useAccessGroups = cfg.commands?.useAccessGroups !== false;
-  const hasControlCommandInMessage = hasControlCommand(messageTextParts.text, cfg, {
+  // Fold prose-only rich text into command detection so a "/cmd" typed in a rich-only message
+  // is recognized; code/quote blocks are excluded by renderRichCommandText.
+  const richCommandText = resolveTelegramRichMessageCommandText(msg);
+  const commandText = [messageTextParts.text, richCommandText].filter(Boolean).join("\n");
+  const hasControlCommandInMessage = hasControlCommand(commandText, cfg, {
     botUsername,
   });
   const commandGate = await resolveTelegramCommandIngressAuthorization({
@@ -276,11 +282,14 @@ export async function resolveTelegramInboundBody(params: {
     messageTextParts.text,
     messageTextParts.entities,
   ).trim();
+  // Body carries full Markdown fidelity; gating uses the plain flatten so Markdown affixes
+  // (pipes, headings, $$) never skew mention regexes.
   const richText = resolveTelegramRichMessageText(msg);
-  const hasUserText = Boolean(rawText || locationText);
-  let rawBody = [rawText, locationText].filter(Boolean).join("\n").trim();
+  const richPlain = resolveTelegramRichMessagePlainText(msg);
+  const hasUserText = Boolean(rawText || richText || locationText);
+  let rawBody = [rawText, richText, locationText].filter(Boolean).join("\n").trim();
   if (!rawBody) {
-    rawBody = richText ?? resolveTelegramRichMessagePlaceholder(msg) ?? placeholder;
+    rawBody = resolveTelegramRichMessagePlaceholder(msg) ?? placeholder;
   }
   if (!rawBody && allMedia.length === 0) {
     return null;
@@ -370,10 +379,10 @@ export async function resolveTelegramInboundBody(params: {
   const hasAnyMention = messageTextParts.entities.some((ent) => ent.type === "mention");
   const explicitlyMentioned = botUsername
     ? hasBotMention(msg, botUsername) ||
-      (richText ? hasBotMentionInText(richText, botUsername) : false)
+      (richPlain ? hasBotMentionInText(richPlain, botUsername) : false)
     : false;
   const computedWasMentioned = matchesMentionWithExplicit({
-    text: messageTextParts.text || richText || "",
+    text: messageTextParts.text || richPlain || "",
     mentionRegexes,
     explicit: {
       hasAnyMention,

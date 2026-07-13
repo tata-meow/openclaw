@@ -1,5 +1,5 @@
 // Telegram helper module supports body helpers behavior.
-import type { Chat, Message, MessageOrigin, User } from "grammy/types";
+import type { Chat, Message, MessageOrigin, RichMessage, User } from "grammy/types";
 import type { NormalizedLocation } from "openclaw/plugin-sdk/channel-inbound";
 import {
   isRecord,
@@ -7,6 +7,12 @@ import {
   normalizeOptionalString,
 } from "openclaw/plugin-sdk/string-coerce-runtime";
 import { telegramHtmlToPlainTextFallback } from "../format.js";
+import { markdownInlineCodeDelimiters, markdownPreAffixes } from "./markdown.js";
+import {
+  renderRichCommandText,
+  renderRichMessageToText,
+  type RichRenderMode,
+} from "./rich-render.js";
 
 type TelegramMediaMessage = Pick<
   Message,
@@ -105,83 +111,22 @@ function hasTelegramRichMessage(value: unknown): boolean {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
-function compactRichText(value: string): string {
-  return value
-    .split("\n")
-    .map((line) => line.trim())
-    .filter(Boolean)
-    .join("\n");
-}
-
-function joinRichText(parts: string[], separator: string): string {
-  return parts.map(compactRichText).filter(Boolean).join(separator);
-}
-
-function renderRichInlineText(value: unknown): string {
-  if (typeof value === "string") {
-    return value;
+// Inbound RichMessage is {blocks, is_rtl} (Bot API 10.1). markdown/html only appear on the send
+// form (InputRichMessage), but keep the short-circuit so a defensive/legacy top-level payload
+// still surfaces text instead of rendering empty.
+function renderTelegramRichText(rich: unknown, mode: RichRenderMode): string | undefined {
+  if (!hasTelegramRichMessage(rich)) {
+    return undefined;
   }
-  if (Array.isArray(value)) {
-    return value.map(renderRichInlineText).filter(Boolean).join("");
-  }
-  if (!isRecord(value)) {
-    return "";
-  }
-  const directText = value.text;
-  if (directText !== undefined) {
-    return renderRichInlineText(directText);
-  }
-  for (const key of ["alternative_text", "expression"] as const) {
-    const text = value[key];
-    if (typeof text === "string") {
-      return text;
+  if (isRecord(rich)) {
+    if (typeof rich.markdown === "string") {
+      return rich.markdown || undefined;
+    }
+    if (typeof rich.html === "string") {
+      return telegramHtmlToPlainTextFallback(rich.html) || undefined;
     }
   }
-  return "";
-}
-
-function renderRichBlocks(value: unknown): string {
-  if (Array.isArray(value)) {
-    return joinRichText(value.map(renderRichBlocks), "\n");
-  }
-  if (!isRecord(value)) {
-    return renderRichInlineText(value);
-  }
-  if (typeof value.markdown === "string") {
-    return value.markdown;
-  }
-  if (typeof value.html === "string") {
-    return telegramHtmlToPlainTextFallback(value.html);
-  }
-  const parts: string[] = [];
-  for (const key of [
-    "text",
-    "summary",
-    "label",
-    "title",
-    "subtitle",
-    "credit",
-    "expression",
-  ] as const) {
-    parts.push(renderRichInlineText(value[key]));
-  }
-  if (value.caption !== undefined) {
-    const caption = value.caption;
-    if (isRecord(caption) && caption.credit !== undefined) {
-      parts.push(
-        joinRichText(
-          [renderRichInlineText(caption.text), renderRichInlineText(caption.credit)],
-          "\n",
-        ),
-      );
-    } else {
-      parts.push(renderRichInlineText(caption));
-    }
-  }
-  for (const key of ["blocks", "items", "rows", "cells", "headers", "children"] as const) {
-    parts.push(renderRichBlocks(value[key]));
-  }
-  return joinRichText(parts, "\n");
+  return renderRichMessageToText(rich as RichMessage, mode) || undefined;
 }
 
 export function resolveTelegramRichMessagePlaceholder(
@@ -190,11 +135,26 @@ export function resolveTelegramRichMessagePlaceholder(
   return hasTelegramRichMessage(msg.rich_message) ? TELEGRAM_RICH_MESSAGE_PLACEHOLDER : undefined;
 }
 
+// Body text for the agent: full Markdown fidelity (GFM tables, $$ math, media placeholders,
+// headings, quotes, lists).
 export function resolveTelegramRichMessageText(msg: TelegramTextMessage): string | undefined {
+  return renderTelegramRichText(msg.rich_message, "markdown");
+}
+
+// Gating text for mention matching: plain flatten so Markdown affixes never skew mention regexes.
+export function resolveTelegramRichMessagePlainText(msg: TelegramTextMessage): string | undefined {
+  return renderTelegramRichText(msg.rich_message, "plain");
+}
+
+// Command detection text: prose-only plain flatten so a "/cmd" quoted inside a code/quote block
+// is not mistaken for a typed command.
+export function resolveTelegramRichMessageCommandText(
+  msg: TelegramTextMessage,
+): string | undefined {
   if (!hasTelegramRichMessage(msg.rich_message)) {
     return undefined;
   }
-  return compactRichText(renderRichBlocks(msg.rich_message)) || undefined;
+  return renderRichCommandText(msg.rich_message as RichMessage) || undefined;
 }
 
 export function resolveTelegramRichMessageBody(msg: TelegramTextMessage): string | undefined {
@@ -308,36 +268,6 @@ const TELEGRAM_ENTITY_MARKDOWN_PRIORITY: Record<string, number> = {
   code: 70,
   pre: 80,
 };
-
-function longestBacktickRun(text: string): number {
-  let longest = 0;
-  let current = 0;
-  for (const char of text) {
-    if (char === "`") {
-      current += 1;
-      longest = Math.max(longest, current);
-    } else {
-      current = 0;
-    }
-  }
-  return longest;
-}
-
-function markdownInlineCodeDelimiters(content: string): [string, string] {
-  const delimiter = "`".repeat(longestBacktickRun(content) + 1);
-  if (content.startsWith(" ") || content.endsWith(" ")) {
-    return [`${delimiter} `, ` ${delimiter}`];
-  }
-  return [delimiter, delimiter];
-}
-
-function markdownPreAffixes(entity: TelegramMarkdownEntity, content: string): [string, string] {
-  const language = entity.language?.replace(/[\s`]+/g, "").trim();
-  const fence = "`".repeat(Math.max(3, longestBacktickRun(content) + 1));
-  const opener = language ? `${fence}${language}\n` : `${fence}\n`;
-  const closer = content.endsWith("\n") ? fence : `\n${fence}`;
-  return [opener, closer];
-}
 
 function markdownAffixesForTelegramEntity(
   entity: TelegramMarkdownEntity,
