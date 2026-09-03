@@ -1,6 +1,6 @@
 {
   "name": "openclaw",
-  "version": "2026.8.2",
+  "version": "2026.8.2+telegram-inbound-rich-message",
   "openclaw": {
     "schemaVersions": {
       "state": 15,
