@@ -439,9 +439,9 @@ describe("Telegram admitted model input", () => {
     });
     const input = harness.replySpy.mock.calls[0]?.[0];
     expect(input?.BodyForAgent).toBe(
-      "@openclaw_bot **review**\n\n## Run summary\n\n- **1.** CI clean\n\n$$a^2+b^2=c^2$$\n\n<media:image>\nChart\n— OpenClaw\n\n| 42 |\n| --- |\nTotal **Q1**",
+      "@openclaw_bot **review**\n\n**Run summary**\n\n- **1.** CI clean\n\n$$a^2+b^2=c^2$$\n\n<media:image>\nChart\n— OpenClaw\n\n| 42 |\n| --- |\nTotal **Q1**",
     );
-    expect(input?.Body).toContain("Alice (42001): @openclaw_bot review");
+    expect(input?.Body).toContain("Alice (42001): @openclaw_bot **review**");
   });
 
   it("activates rich mention patterns without activating non-text rich placeholders", async () => {
